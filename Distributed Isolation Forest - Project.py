@@ -21,15 +21,25 @@
 
 # COMMAND ----------
 
-import sys
-print("\n".join(sys.path))
-
-# COMMAND ----------
-
 from pyspark.ml.feature import VectorAssembler
+from matplotlib import pyplot as plt
 from sklearn import metrics
 from DIForest import DIForest
+from DIForestModel import DIForestModel
+from sklearn.ensemble import IsolationForest
+import numpy as np
+import pandas as pd
 import time
+
+from synapse.ml.isolationforest import *
+from synapse.ml.explainers import *
+from synapse.ml.core.platform import *
+
+if running_on_synapse():
+    shell = TerminalInteractiveShell.instance()
+    shell.define_macro("foo", """a,b=10,20""")
+    
+from synapse.ml.core.platform import materializing_display as display
 
 # COMMAND ----------
 
@@ -69,7 +79,9 @@ def evaluate_model(model_name, y_true, y_pred, y_score):
 # COMMAND ----------
 
 data = spark.read.table("hive_metastore.default.shuttle")
+print("Schema:")
 data.printSchema()
+print()
 
 samples_count = data.count()
 outliers_count = data.where(data["Y"] == 1).count()
@@ -82,6 +94,7 @@ input_cols=["attr1", "attr2", "attr3", "attr4", "attr5", "attr6", "attr7", "attr
 
 assembler = VectorAssembler(inputCols=input_cols, outputCol="features")
 data = assembler.transform(data)
+data.show()
 
 # COMMAND ----------
 
@@ -93,10 +106,78 @@ start_time = time.time()
 
 dis_model = DIForest(100, 256).fit(spark, data)
 predictions = dis_model.transform(spark, data)
+predictions_df = predictions.select("attr1", "attr2", "attr3", "attr4", "attr5", "attr6", "attr7", "attr8", "attr9", "Y", "outlierScore", "predictionLabel").toPandas()
+end_time = time.time()
 
-et = time.time()
-
-elapsed_time = et - st
+elapsed_time = end_time - start_time
 print('Execution time:', elapsed_time, 'seconds')
 
-evaluate_model("DISForest", predictions_df["Y"], predictions_df["prediction"], predictions_df["anomalyScore"])
+evaluate_model("DISForest", predictions_df["Y"], predictions_df["predictionLabel"], predictions_df["outlierScore"])
+
+# COMMAND ----------
+
+# MAGIC %md ### SKLearn - non distributed implemenation
+
+# COMMAND ----------
+
+non_distributed_data_df = data.toPandas()
+non_distributed_data_df = non_distributed_data_df.drop("features", axis=1)
+
+# COMMAND ----------
+
+start_time = time.time()
+
+# Init the model with default parameters
+isolation_forest_model = IsolationForest(n_estimators=100)
+
+# Fit the model
+isolation_forest_model.fit(non_distributed_data_df[["attr1", "attr2", "attr3", "attr4", "attr5", "attr6", "attr7", "attr8", "attr9"]])
+
+# Predict
+predictions = isolation_forest_model.predict(non_distributed_data_df[["attr1", "attr2", "attr3", "attr4", "attr5", "attr6", "attr7", "attr8", "attr9"]])
+non_distributed_data_df['outlierScore'] = isolation_forest_model.score_samples(non_distributed_data_df[["attr1", "attr2", "attr3", "attr4", "attr5", "attr6", "attr7", "attr8", "attr9"]])
+non_distributed_data_df["predictionLabel"] = np.where(predictions == 1, 0, 1)
+
+end_time = time.time()
+
+elapsed_time = end_time - start_time
+print('Execution time:', elapsed_time, 'seconds')
+
+evaluate_model("SKLearn", non_distributed_data_df["Y"], non_distributed_data_df["predictionLabel"], predictions_df["outlierScore"])
+
+# COMMAND ----------
+
+# MAGIC %md ### SynapseML
+
+# COMMAND ----------
+
+start_time = time.time()
+
+# Init IsolationForest like in the SynapseML documentation
+contamination = 0.021
+num_estimators = 100
+max_samples = 256
+max_features = 1.0
+
+isolationForest = (
+    IsolationForest()
+    .setNumEstimators(num_estimators)
+    .setMaxSamples(max_samples)
+    .setFeaturesCol("features")
+    .setPredictionCol("predictedLabel")
+    .setScoreCol("outlierScore")
+    .setContamination(contamination)
+    .setContaminationError(0.01 * contamination)
+    .setRandomSeed(1)
+)
+model = isolationForest.fit(data)
+predictions = model.transform(data)
+
+predictions_df = predictions.select("attr1", "attr2", "attr3", "attr4", "attr5", "attr6", "attr7", "attr8", "attr9", "Y", "outlierScore", "predictedLabel").toPandas()
+
+end_time = time.time()
+
+elapsed_time = end_time - start_time
+print('Execution time:', elapsed_time, 'seconds')
+
+evaluate_model("SynapseML", predictions_df["Y"], predictions_df["predictedLabel"], predictions_df["outlierScore"])

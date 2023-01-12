@@ -4,8 +4,9 @@ import math
 from typing import List
 
 from pyspark.sql import DataFrame, SparkSession
-from pyspark.sql.functions import col
+from pyspark.sql import functions as F
 from pyspark.ml.functions import vector_to_array
+
 
 
 class DIForestModel:
@@ -37,18 +38,17 @@ class DIForestModel:
         trees = spark.sparkContext.broadcast(self._trees)
 
         predictions = samples.withColumn("featuresArray", vector_to_array(col("features")))
-        predictions.printSchema()
-
+        
         # Add anomaly scores as a column to the DF
         predictions = predictions.withColumn(
-            "anomalyScore",
+            "outlierScore",
             udf(
                 lambda sample: DIForestModel._anomaly_score(sample, trees.value,num_samples.value), FloatType()
             )(col("featuresArray")))
 
         # Add predictions as a column to the DF (based on given threshold)
-        predictions = predictions.withColumn("prediction", col("anomalyScore") > self._threshold)
-        return predictions
+        predictions = predictions.withColumn("predictedLabel", F.when(F.col("outlierScore") > self._threshold, 1).otherwise(0))
+        return predictions.drop("featuresArray")
 
     @staticmethod
     def _anomaly_score(sample: List[float], trees: List[dict], num_samples: int) -> float:
