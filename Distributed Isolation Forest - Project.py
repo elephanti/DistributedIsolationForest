@@ -26,7 +26,7 @@ from matplotlib import pyplot as plt
 from sklearn import metrics
 from DIForest import DIForest
 from DIForestModel import DIForestModel
-from sklearn.ensemble import IsolationForest
+from sklearn.ensemble import IsolationForest as SKLearnIsolationForest
 import numpy as np
 import pandas as pd
 import time
@@ -128,7 +128,7 @@ non_distributed_data_df = non_distributed_data_df.drop("features", axis=1)
 start_time = time.time()
 
 # Init the model with default parameters
-isolation_forest_model = IsolationForest(n_estimators=100)
+isolation_forest_model = SKLearnIsolationForest(n_estimators=100)
 
 # Fit the model
 isolation_forest_model.fit(non_distributed_data_df[["attr1", "attr2", "attr3", "attr4", "attr5", "attr6", "attr7", "attr8", "attr9"]])
@@ -174,6 +174,226 @@ model = isolationForest.fit(data)
 predictions = model.transform(data)
 
 predictions_df = predictions.select("attr1", "attr2", "attr3", "attr4", "attr5", "attr6", "attr7", "attr8", "attr9", "Y", "outlierScore", "predictedLabel").toPandas()
+
+end_time = time.time()
+
+elapsed_time = end_time - start_time
+print('Execution time:', elapsed_time, 'seconds')
+
+evaluate_model("SynapseML", predictions_df["Y"], predictions_df["predictedLabel"], predictions_df["outlierScore"])
+
+# COMMAND ----------
+
+# MAGIC %md ## Annthyroid
+
+# COMMAND ----------
+
+data = spark.read.table("hive_metastore.default.annthyroid")
+print("Schema:")
+data.printSchema()
+print()
+
+samples_count = data.count()
+outliers_count = data.where(data["Y"] == 1).count()
+
+print("Count: ", samples_count)
+print("Outliers: ", outliers_count)
+print("Outliers percentage: ", outliers_count * 100 / samples_count, "%")
+
+input_cols=["attr1", "attr2", "attr3", "attr4", "attr5", "attr6"]
+
+assembler = VectorAssembler(inputCols=input_cols, outputCol="features")
+data = assembler.transform(data)
+data.show()
+
+# COMMAND ----------
+
+# MAGIC %md ### Our Implementation
+
+# COMMAND ----------
+
+start_time = time.time()
+
+dis_model = DIForest(100, 256).fit(spark, data)
+predictions = dis_model.transform(spark, data)
+predictions_df = predictions.select("attr1", "attr2", "attr3", "attr4", "attr5", "attr6", "Y", "outlierScore", "predictionLabel").toPandas()
+end_time = time.time()
+
+elapsed_time = end_time - start_time
+print('Execution time:', elapsed_time, 'seconds')
+
+evaluate_model("DISForest", predictions_df["Y"], predictions_df["predictionLabel"], predictions_df["outlierScore"])
+
+# COMMAND ----------
+
+# MAGIC %md ### SKLearn - non distributed implemenation
+
+# COMMAND ----------
+
+non_distributed_data_df = data.toPandas()
+non_distributed_data_df = non_distributed_data_df.drop("features", axis=1)
+
+# COMMAND ----------
+
+start_time = time.time()
+
+# Init the model with default parameters
+isolation_forest_model = SKLearnIsolationForest(n_estimators=100)
+
+# Fit the model
+isolation_forest_model.fit(non_distributed_data_df[["attr1", "attr2", "attr3", "attr4", "attr5", "attr6"]])
+
+# Predict
+predictions = isolation_forest_model.predict(non_distributed_data_df[["attr1", "attr2", "attr3", "attr4", "attr5", "attr6"]])
+non_distributed_data_df['outlierScore'] = isolation_forest_model.score_samples(non_distributed_data_df[["attr1", "attr2", "attr3", "attr4", "attr5", "attr6"]])
+non_distributed_data_df["predictionLabel"] = np.where(predictions == 1, 0, 1)
+
+end_time = time.time()
+
+elapsed_time = end_time - start_time
+print('Execution time:', elapsed_time, 'seconds')
+
+evaluate_model("SKLearn", non_distributed_data_df["Y"], non_distributed_data_df["predictionLabel"], predictions_df["outlierScore"])
+
+# COMMAND ----------
+
+# MAGIC %md ### SynapseML
+
+# COMMAND ----------
+
+start_time = time.time()
+
+# Init IsolationForest like in the SynapseML documentation
+contamination = 0.021
+num_estimators = 100
+max_samples = 256
+max_features = 1.0
+
+isolationForest = (
+    IsolationForest()
+    .setNumEstimators(num_estimators)
+    .setMaxSamples(max_samples)
+    .setFeaturesCol("features")
+    .setPredictionCol("predictedLabel")
+    .setScoreCol("outlierScore")
+    .setContamination(contamination)
+    .setContaminationError(0.01 * contamination)
+    .setRandomSeed(1)
+)
+model = isolationForest.fit(data)
+predictions = model.transform(data)
+
+predictions_df = predictions.select("attr1", "attr2", "attr3", "attr4", "attr5", "attr6", "Y", "outlierScore", "predictedLabel").toPandas()
+
+end_time = time.time()
+
+elapsed_time = end_time - start_time
+print('Execution time:', elapsed_time, 'seconds')
+
+evaluate_model("SynapseML", predictions_df["Y"], predictions_df["predictedLabel"], predictions_df["outlierScore"])
+
+# COMMAND ----------
+
+# MAGIC %md ## ForestCover
+
+# COMMAND ----------
+
+data = spark.read.table("hive_metastore.default.cover")
+print("Schema:")
+data.printSchema()
+print()
+
+samples_count = data.count()
+outliers_count = data.where(data["Y"] == 1).count()
+
+print("Count: ", samples_count)
+print("Outliers: ", outliers_count)
+print("Outliers percentage: ", outliers_count * 100 / samples_count, "%")
+
+input_cols=["attr1", "attr2", "attr3", "attr4", "attr5", "attr6", "attr7", "attr8", "attr9", "attr10"]
+
+assembler = VectorAssembler(inputCols=input_cols, outputCol="features")
+data = assembler.transform(data)
+data.show()
+
+# COMMAND ----------
+
+# MAGIC %md ### Our Implementation
+
+# COMMAND ----------
+
+start_time = time.time()
+
+dis_model = DIForest(100, 256).fit(spark, data)
+predictions = dis_model.transform(spark, data)
+predictions_df = predictions.select("attr1", "attr2", "attr3", "attr4", "attr5", "attr6", "attr7", "attr8", "attr9", "attr10", "Y", "outlierScore", "predictionLabel").toPandas()
+end_time = time.time()
+
+elapsed_time = end_time - start_time
+print('Execution time:', elapsed_time, 'seconds')
+
+evaluate_model("DISForest", predictions_df["Y"], predictions_df["predictionLabel"], predictions_df["outlierScore"])
+
+# COMMAND ----------
+
+# MAGIC %md ### SKLearn - non distributed implementation
+
+# COMMAND ----------
+
+non_distributed_data_df = data.toPandas()
+non_distributed_data_df = non_distributed_data_df.drop("features", axis=1)
+
+# COMMAND ----------
+
+start_time = time.time()
+
+# Init the model with default parameters
+isolation_forest_model = SKLearnIsolationForest(n_estimators=100)
+
+# Fit the model
+isolation_forest_model.fit(non_distributed_data_df[["attr1", "attr2", "attr3", "attr4", "attr5", "attr6", "attr7", "attr8", "attr9", "attr10"]])
+
+# Predict
+predictions = isolation_forest_model.predict(non_distributed_data_df[["attr1", "attr2", "attr3", "attr4", "attr5", "attr6", "attr7", "attr8", "attr9", "attr10"]])
+non_distributed_data_df['outlierScore'] = isolation_forest_model.score_samples(non_distributed_data_df[["attr1", "attr2", "attr3", "attr4", "attr5", "attr6", "attr7", "attr8", "attr9", "attr10"]])
+non_distributed_data_df["predictionLabel"] = np.where(predictions == 1, 0, 1)
+
+end_time = time.time()
+
+elapsed_time = end_time - start_time
+print('Execution time:', elapsed_time, 'seconds')
+
+evaluate_model("SKLearn", non_distributed_data_df["Y"], non_distributed_data_df["predictionLabel"], predictions_df["outlierScore"])
+
+# COMMAND ----------
+
+# MAGIC %md ### SynapseML
+
+# COMMAND ----------
+
+start_time = time.time()
+
+# Init IsolationForest like in the SynapseML documentation
+contamination = 0.021
+num_estimators = 100
+max_samples = 256
+max_features = 1.0
+
+isolationForest = (
+    IsolationForest()
+    .setNumEstimators(num_estimators)
+    .setMaxSamples(max_samples)
+    .setFeaturesCol("features")
+    .setPredictionCol("predictedLabel")
+    .setScoreCol("outlierScore")
+    .setContamination(contamination)
+    .setContaminationError(0.01 * contamination)
+    .setRandomSeed(1)
+)
+model = isolationForest.fit(data)
+predictions = model.transform(data)
+
+predictions_df = predictions.select("attr1", "attr2", "attr3", "attr4", "attr5", "attr6", "attr7", "attr8", "attr9", "attr10", "Y", "outlierScore", "predictedLabel").toPandas()
 
 end_time = time.time()
 
