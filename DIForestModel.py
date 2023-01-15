@@ -1,4 +1,3 @@
-from pyspark.sql.functions import udf
 from pyspark.sql.types import FloatType
 import math
 from typing import List
@@ -37,14 +36,14 @@ class DIForestModel:
         num_samples = spark.sparkContext.broadcast(self._num_samples)
         trees = spark.sparkContext.broadcast(self._trees)
 
-        predictions = samples.withColumn("featuresArray", vector_to_array(col("features")))
+        predictions = samples.withColumn("featuresArray", vector_to_array(F.col("features")))
         
         # Add anomaly scores as a column to the DF
         predictions = predictions.withColumn(
             "outlierScore",
-            udf(
+            F.udf(
                 lambda sample: DIForestModel._anomaly_score(sample, trees.value,num_samples.value), FloatType()
-            )(col("featuresArray")))
+            )(F.col("featuresArray")))
 
         # Add predictions as a column to the DF (based on given threshold)
         predictions = predictions.withColumn("predictedLabel", F.when(F.col("outlierScore") > self._threshold, 1).otherwise(0))
