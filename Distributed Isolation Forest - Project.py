@@ -73,7 +73,21 @@ def evaluate_model(model_name, y_true, y_pred, y_score):
     plt.plot([0, 0], [1, 0] , c=".7"), plt.plot([1, 1] , c=".7")
     plt.ylabel('True Positive Rate')
     plt.xlabel('False Positive Rate')
-    plt.show()
+    plt.show()   
+    
+    precision_recall_auc = metrics.average_precision_score(y_true, y_score)
+    precision, recall, thresholds = metrics.precision_recall_curve(y_true, y_score)
+    
+    plt.subplots(1, figsize=(10,10))
+    plt.title(f'{model_name}, Precision-Recall AUC={precision_recall_auc}')
+    plt.plot(recall, precision)
+    plt.plot([0, 1], ls="--")
+    plt.plot([0, 0], [1, 0] , c=".7"), plt.plot([1, 1] , c=".7")
+    plt.ylabel('Precision')
+    plt.xlabel('Recall')
+    plt.show()  
+    
+
 
 # COMMAND ----------
 
