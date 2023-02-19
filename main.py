@@ -5,6 +5,9 @@ from DIForest import DIForest
 
 
 def main():
+    """
+    Example usage of DIForest
+    """
     spark = SparkSession.builder().appName("DIForest").getOrCreate()
     samples = spark.read.csv("https.csv")
     samples.printSchema()
@@ -16,11 +19,8 @@ def main():
 
     dis_model = DIForest(100, 256).fit(spark, samples)
     predictions = dis_model.transform(spark, samples)
-
-    # TODO: Calculate correctness (AUC, false positives, accuracy, etc..)
     predictions.show()
 
 
-# Press the green button in the gutter to run the script.
 if __name__ == '__main__':
     main()
