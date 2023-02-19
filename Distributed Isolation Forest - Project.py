@@ -1,11 +1,10 @@
 # Databricks notebook source
 # MAGIC %md # Distributed Isolation Forest
 # MAGIC 
-# MAGIC In this project we implemented a distributed versino of the Isolation Forest algorithm.
+# MAGIC In this project we implemented a distributed versions of the Isolation Forest algorithm.
 # MAGIC We compare our implementation to 3 other implementations:
 # MAGIC 1. Sklearn-IForest - non distributed version of Isolation Forest
-# MAGIC 2. spark-iforest - a distributed implementation of Isolation Forest
-# MAGIC 3. SynapseML - distributed implementation by Microsoft
+# MAGIC 2. SynapseML - distributed implementation by Microsoft
 # MAGIC 
 # MAGIC We compare the performance on the following datasets:
 # MAGIC 1. Shuttle
@@ -14,8 +13,6 @@
 # MAGIC 4. Arrhythmia
 # MAGIC 5. Particle
 # MAGIC 6. Yearp
-# MAGIC 5. Mammography
-# MAGIC 6. Http (KDDCUP99)
 
 # COMMAND ----------
 
